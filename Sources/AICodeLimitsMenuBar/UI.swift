@@ -5,6 +5,38 @@ func result<T>(_ operation: () async throws -> T) async -> Result<T, Error> {
   do { return .success(try await operation()) } catch { return .failure(error) }
 }
 
+/// Приглушённая, адаптивная к теме палитра. Яркие systemRed/systemOrange плохо
+/// читаются в строке меню (особенно на светлой теме), поэтому здесь глубокий
+/// кирпичный / янтарный для светлой и мягкий коралл / янтарь для тёмной.
+enum StatusPalette {
+  nonisolated(unsafe) static let critical = NSColor(name: nil) { appearance in
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      ? NSColor(srgbRed: 1.00, green: 0.56, blue: 0.52, alpha: 1)
+      : NSColor(srgbRed: 0.72, green: 0.17, blue: 0.14, alpha: 1)
+  }
+  nonisolated(unsafe) static let warning = NSColor(name: nil) { appearance in
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      ? NSColor(srgbRed: 0.98, green: 0.75, blue: 0.33, alpha: 1)
+      : NSColor(srgbRed: 0.70, green: 0.33, blue: 0.05, alpha: 1)
+  }
+  // Непрозрачный приглушённый серый: secondaryLabelColor полупрозрачный и
+  // исчезает на полупрозрачной строке меню, а mild должен читаться.
+  nonisolated(unsafe) static let mild = NSColor(name: nil) { appearance in
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      ? NSColor(srgbRed: 0.62, green: 0.62, blue: 0.67, alpha: 1)
+      : NSColor(srgbRed: 0.42, green: 0.42, blue: 0.45, alpha: 1)
+  }
+
+  static func color(_ level: LimitLevel) -> NSColor {
+    switch level {
+    case .ok: return .labelColor
+    case .mild: return mild
+    case .warning: return warning
+    case .critical: return critical
+    }
+  }
+}
+
 final class LimitRowView: NSView {
   private let limit: UsageWindow
 
@@ -41,8 +73,13 @@ final class LimitRowView: NSView {
     NSBezierPath(roundedRect: bar, xRadius: 4, yRadius: 4).fill()
     let width = bar.width * CGFloat(remaining) / 100
     if width > 0 {
-      let colors: [NSColor] = remaining <= 10 ? [.systemRed, .systemPink]
-        : remaining <= 20 ? [.systemOrange, .systemYellow] : [.systemTeal, .systemCyan]
+      let colors: [NSColor]
+      switch limit.level {
+      case .ok: colors = [.systemTeal, .systemCyan]
+      case .mild: colors = [StatusPalette.mild, StatusPalette.mild.blended(withFraction: 0.35, of: .white) ?? StatusPalette.mild]
+      case .warning: colors = [StatusPalette.warning, StatusPalette.warning.blended(withFraction: 0.35, of: .white) ?? StatusPalette.warning]
+      case .critical: colors = [StatusPalette.critical, StatusPalette.critical.blended(withFraction: 0.35, of: .white) ?? StatusPalette.critical]
+      }
       NSGradient(colors: colors)!.draw(
         in: NSBezierPath(roundedRect: NSRect(x: bar.minX, y: bar.minY, width: width, height: bar.height),
                          xRadius: 4, yRadius: 4), angle: 0
@@ -140,21 +177,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func updateTitle() {
-    let all = Provider.allCases.compactMap { snapshots[$0] }
-    let stale = !errors.isEmpty ? " ·!" : ""
-    let text = Provider.allCases.map { provider -> String in
-      guard let snapshot = snapshots[provider] else { return "\(provider.shortTitle) —" }
-      let values = snapshot.usage.windows.map { "\($0.remainingPercent)" }.joined(separator: "·")
-      return "\(provider.shortTitle) \(values)"
-    }.joined(separator: "  ") + stale
-    let lowest = all.flatMap { $0.usage.windows.map(\.remainingPercent) }.min() ?? 100
-    statusItem.button?.attributedTitle = NSAttributedString(
-      string: text,
-      attributes: [
-        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-        .foregroundColor: lowest <= 10 ? NSColor.systemRed : lowest <= 20 ? .systemOrange : .labelColor,
-      ]
-    )
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    let title = NSMutableAttributedString()
+    func append(_ text: String, _ color: NSColor) {
+      title.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
+    }
+    for (index, provider) in Provider.allCases.enumerated() {
+      if index > 0 { append("  ", .labelColor) }
+      guard let snapshot = snapshots[provider] else {
+        append("\(provider.shortTitle) —", .labelColor)
+        continue
+      }
+      let windows = snapshot.usage.windows
+      // Буква провайдера — по «бюджетным» окнам (не 5h): временный rate-limit
+      // не должен красить весь сервис. Если есть только rolling — по нему.
+      let durable = windows.filter { $0.kind != .rolling }
+      let letterLevel = (durable.isEmpty ? windows : durable).map(\.level).max() ?? .ok
+      append(provider.shortTitle, StatusPalette.color(letterLevel))
+      append(" ", .labelColor)
+      for (windowIndex, window) in windows.enumerated() {
+        if windowIndex > 0 { append("·", StatusPalette.mild) }
+        append("\(window.remainingPercent)", StatusPalette.color(window.level))
+      }
+    }
+    if !errors.isEmpty { append(" ·!", StatusPalette.warning) }
+    statusItem.button?.attributedTitle = title
     statusItem.button?.toolTip = "Kimi Coding · OpenCode Go · Qwen Token Plan — остаток лимитов, %"
   }
 

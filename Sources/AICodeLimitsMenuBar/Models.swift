@@ -1,12 +1,52 @@
 import Foundation
 
+/// Длительность окна лимита. Короткие (5h) — временный rate-limit, который
+/// сам восстановится; месяц — реальный бюджет подписки. От этого зависит,
+/// насколько «тревожным» должен быть цвет.
+enum WindowKind {
+  case rolling, weekly, monthly
+
+  static func infer(_ title: String) -> WindowKind {
+    let lower = title.lowercased()
+    if lower.contains("week") || lower.contains("7d") { return .weekly }
+    if lower.contains("month") || lower.contains("30d") { return .monthly }
+    return .rolling
+  }
+}
+
+/// Уровень тревоги окна. rolling никогда не поднимается выше mild.
+enum LimitLevel: Int, Comparable {
+  case ok = 0, mild = 1, warning = 2, critical = 3
+
+  static func < (lhs: LimitLevel, rhs: LimitLevel) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
 struct UsageWindow {
   let title: String
   let usedPercent: Double
   let resetsAt: Date?
+  let kind: WindowKind
+
+  init(title: String, usedPercent: Double, resetsAt: Date?, kind: WindowKind? = nil) {
+    self.title = title
+    self.usedPercent = usedPercent
+    self.resetsAt = resetsAt
+    self.kind = kind ?? WindowKind.infer(title)
+  }
 
   var remainingPercent: Int {
     max(0, min(100, 100 - Int(usedPercent.rounded())))
+  }
+
+  /// Тревога с учётом длительности окна: исчерпанный 5h — это mild (временно),
+  /// исчерпанный месяц — critical (бюджет кончился).
+  var level: LimitLevel {
+    let remaining = remainingPercent
+    switch kind {
+    case .monthly: return remaining <= 10 ? .critical : remaining <= 20 ? .warning : .ok
+    case .weekly: return remaining <= 10 ? .warning : remaining <= 20 ? .mild : .ok
+    case .rolling: return remaining <= 10 ? .mild : .ok
+    }
   }
 }
 
