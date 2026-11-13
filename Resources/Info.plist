@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleExecutable</key>
-  <string>CodingLimitsMenuBar</string>
+  <string>AICodeLimitsMenuBar</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
-  <string>local.coding-limits-menubar</string>
+  <string>local.ai-code-limits-menubar</string>
   <key>CFBundleName</key>
-  <string>Coding Limits</string>
+  <string>AI Code Limits</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>

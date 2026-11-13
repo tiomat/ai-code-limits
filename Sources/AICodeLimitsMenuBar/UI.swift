@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-    statusItem.button?.title = "K …  G …"
+    statusItem.button?.title = "K …  G …  Q …"
     rebuildMenu()
     refresh()
     refreshTimer = Timer.scheduledTimer(
@@ -86,7 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Task { [weak self] in
       async let kimi = result { try await KimiReader.fetch() }
       async let go = result { try await OpenCodeReader.fetch() }
-      let results = await [Provider.kimi: kimi, Provider.go: go]
+      async let qwen = result { try await QwenReader.fetch() }
+      let results = await [Provider.kimi: kimi, Provider.go: go, Provider.qwen: qwen]
       await MainActor.run {
         guard let self else { return }
         for (provider, result) in results {
@@ -108,11 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let menu = NSMenu()
     statusItem.menu = menu
     for provider in Provider.allCases {
-      let heading = provider == .go ? "OpenCode Go" : "Kimi Coding"
+      let heading = provider.heading
       menu.addItem(withTitle: heading, action: nil, keyEquivalent: "")
       if let snapshot = snapshots[provider] {
         if let workspace = snapshot.usage.workspace, !workspace.isEmpty {
-          menu.addItem(withTitle: "Workspace: \(workspace)", action: nil, keyEquivalent: "")
+          menu.addItem(withTitle: workspace, action: nil, keyEquivalent: "")
         }
         for limit in snapshot.usage.windows {
           let item = NSMenuItem()
@@ -129,12 +130,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       } else if snapshots[provider] == nil {
         menu.addItem(withTitle: "Загрузка…", action: nil, keyEquivalent: "")
       }
-      let openAction = provider == .kimi ? #selector(openKimi) : #selector(openGo)
-      menu.addItem(withTitle: "Открыть \(heading)", action: openAction, keyEquivalent: "").target = self
+      let openItem = menu.addItem(withTitle: "Открыть \(heading)", action: #selector(openDashboard(_:)), keyEquivalent: "")
+      openItem.target = self
+      openItem.representedObject = provider
       menu.addItem(.separator())
     }
     menu.addItem(withTitle: "Обновить", action: #selector(refresh), keyEquivalent: "r").target = self
-    menu.addItem(withTitle: "Закрыть Coding Limits", action: #selector(quit), keyEquivalent: "q").target = self
+    menu.addItem(withTitle: "Закрыть AI Code Limits", action: #selector(quit), keyEquivalent: "q").target = self
   }
 
   private func updateTitle() {
@@ -153,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         .foregroundColor: lowest <= 10 ? NSColor.systemRed : lowest <= 20 ? .systemOrange : .labelColor,
       ]
     )
-    statusItem.button?.toolTip = "Kimi Coding · OpenCode Go — остаток лимитов, %"
+    statusItem.button?.toolTip = "Kimi Coding · OpenCode Go · Qwen Token Plan — остаток лимитов, %"
   }
 
   private func freshness(_ timestamp: Date) -> String {
@@ -165,7 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     (error as? UsageError)?.errorDescription ?? error.localizedDescription
   }
 
-  @objc private func openKimi() { NSWorkspace.shared.open(Provider.kimi.dashboard) }
-  @objc private func openGo() { NSWorkspace.shared.open(Provider.go.dashboard) }
+  @objc private func openDashboard(_ sender: NSMenuItem) {
+    guard let provider = sender.representedObject as? Provider else { return }
+    NSWorkspace.shared.open(provider.dashboard)
+  }
   @objc private func quit() { NSApplication.shared.terminate(nil) }
 }

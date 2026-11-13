@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-  name: "CodingLimitsMenuBar",
+  name: "AICodeLimitsMenuBar",
   platforms: [.macOS(.v14)],
   products: [
-    .executable(name: "CodingLimitsMenuBar", targets: ["CodingLimitsMenuBar"]),
+    .executable(name: "AICodeLimitsMenuBar", targets: ["AICodeLimitsMenuBar"]),
   ],
   targets: [
-    .executableTarget(name: "CodingLimitsMenuBar"),
+    .executableTarget(name: "AICodeLimitsMenuBar"),
   ]
 )

@@ -69,7 +69,7 @@ enum OpenCodeReader {
     var request = URLRequest(url: usageURL)
     request.timeoutInterval = 15
     request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-    request.setValue("CodingLimits/1.0", forHTTPHeaderField: "User-Agent")
+    request.setValue("AICodeLimits/1.0", forHTTPHeaderField: "User-Agent")
     let (data, response) = try await URLSession.shared.data(for: request)
     switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
     case 200: return data

@@ -22,10 +22,10 @@ func snapshotText(_ snapshot: ProviderSnapshot) -> String {
 let arguments = CommandLine.arguments
 if arguments.contains("--raw") {
   runSynchronously {
-    async let kimi = try? KimiReader.raw()
-    async let go = try? OpenCodeReader.raw()
-    print("--- Kimi ---\n\(await kimi ?? "unavailable")")
-    print("--- OpenCode Go ---\n\(await go ?? "unavailable")")
+    for provider in Provider.allCases {
+      let raw = try? await provider.raw()
+      print("--- \(provider.heading) ---\n\(raw ?? "unavailable")")
+    }
     return 0
   }
 } else if arguments.contains("--snapshot") {
@@ -33,7 +33,7 @@ if arguments.contains("--raw") {
     var failed = false
     for provider in Provider.allCases {
       do {
-        let snapshot = try await provider == .kimi ? KimiReader.fetch() : OpenCodeReader.fetch()
+        let snapshot = try await provider.fetch()
         print(snapshotText(snapshot))
       } catch {
         failed = true

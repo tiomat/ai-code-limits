@@ -24,12 +24,45 @@ struct ProviderSnapshot {
 enum Provider: String, CaseIterable {
   case kimi = "Kimi"
   case go = "Go"
+  case qwen = "Qwen"
 
-  var shortTitle: String { self == .kimi ? "K" : "G" }
+  var shortTitle: String {
+    switch self {
+    case .kimi: "K"
+    case .go: "G"
+    case .qwen: "Q"
+    }
+  }
+
+  var heading: String {
+    switch self {
+    case .kimi: "Kimi Coding"
+    case .go: "OpenCode Go"
+    case .qwen: "Qwen Token Plan"
+    }
+  }
+
   var dashboard: URL {
     switch self {
     case .kimi: URL(string: "https://www.kimi.ai/code/console")!
     case .go: URL(string: "https://opencode.ai/auth")!
+    case .qwen: URL(string: "https://home.qwencloud.com/analytics/token-plan/individual")!
+    }
+  }
+
+  func fetch() async throws -> ProviderSnapshot {
+    switch self {
+    case .kimi: try await KimiReader.fetch()
+    case .go: try await OpenCodeReader.fetch()
+    case .qwen: try await QwenReader.fetch()
+    }
+  }
+
+  func raw() async throws -> String {
+    switch self {
+    case .kimi: try await KimiReader.raw()
+    case .go: try await OpenCodeReader.raw()
+    case .qwen: try await QwenReader.raw()
     }
   }
 }
@@ -45,7 +78,9 @@ enum UsageError: LocalizedError {
     switch self {
     case let .noCredentials(message): message
     case let .unauthorized(provider):
-      "\(provider.rawValue) отклонил авторизацию. Войдите заново в CLI."
+      provider == .qwen
+        ? "Qwen Cloud отклонил авторизацию. Войдите заново на home.qwencloud.com и обновите cookie."
+        : "\(provider.rawValue) отклонил авторизацию. Войдите заново в CLI."
     case let .http(provider, code): "\(provider.rawValue) вернул HTTP \(code)."
     case let .malformed(provider, detail): "\(provider.rawValue): не удалось разобрать ответ (\(detail))."
     case let .command(message): message
